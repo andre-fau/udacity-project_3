@@ -32,11 +32,15 @@ def test(model, test_loader, loss_criterion):
           testing data loader and will get the test accuray/loss of the model
           Remember to include any debugging/profiling hooks that you might need
     '''
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
     model.eval()
     test_loss = 0
     correct = 0
     with torch.no_grad():
         for data, target in test_loader:
+            data = data.to(device)
+            target = target.to(device)
             output = model(data)
             test_loss += loss_criterion(output, target, size_average=False).item()  # sum up batch loss
             pred = output.max(1, keepdim=True)[1]  # get the index of the max log-probability
@@ -57,10 +61,15 @@ def train(model, train_loader, criterion, optimizer, epochs):
           data loaders for training and will get train the model
           Remember to include any debugging/profiling hooks that you might need
     '''
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+    
     for epoch in range(1, epochs + 1):
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader, 1):
             optimizer.zero_grad()
+            data = data.to(device)
+            target = target.to(device)
             output = model(data)
             loss = criterion(output, target)
             loss.backward()
@@ -83,6 +92,13 @@ def net(pre_model):
           Remember to use a pretrained model
     '''
     model = models.__dict__[pre_model](pretrained=True) # default resnet50
+    for param in model.parameters():
+        param.requires_grad = False
+        
+    num_features = model.fc.in_features
+    
+    model.fc = nn.Sequential(
+    nn.Linear(num_features, 133))
     return model
 
 def create_data_loaders(data, batch_size):
@@ -93,16 +109,21 @@ def create_data_loaders(data, batch_size):
     return torch.utils.data.DataLoader(data, batch_size = batch_size)
     
 def main(args):
+    
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     '''
     TODO: Initialize a model by calling the net function
     '''
     model=net(args.model)
+    model.to(device)
     
     '''
     TODO: Create your loss and optimizer
     '''
     loss_criterion = F.nll_loss
     optimizer = optim.SGD(model.parameters(), lr=args.lr)
+    #loss_criterion = nn.CrossEntropyLoss()
+    #optimizer = optim.Adam(model.fc.parameters(), lr=args.learning_rate)
     
     '''
     TODO: Call the train function to start training your model
@@ -171,11 +192,12 @@ if __name__=='__main__':
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--model", type=str, default="resnet50")
     
-    parser.add_argument("--hosts", type=list, default=json.loads(os.environ["SM_HOSTS"]))
-    parser.add_argument("--current-host", type=str, default=os.environ["SM_CURRENT_HOST"])
+    #parser.add_argument("--hosts", type=list, default=json.loads(os.environ["SM_HOSTS"]))
+    #parser.add_argument("--current-host", type=str, default=os.environ["SM_CURRENT_HOST"])
     parser.add_argument("--model-dir", type=str, default=os.environ["SM_MODEL_DIR"])
     parser.add_argument("--data-dir", type=str, default=os.environ["SM_CHANNEL_TRAINING"])
-    parser.add_argument("--num-gpus", type=int, default=os.environ["SM_NUM_GPUS"])
+    #parser.add_argument("--num-gpus", type=int, default=os.environ["SM_NUM_GPUS"])
+    parser.add_argument('--output-dir', type=str, default=os.environ['SM_OUTPUT_DATA_DIR'])
     
     args=parser.parse_args()
     
